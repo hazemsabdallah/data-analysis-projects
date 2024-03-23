@@ -1,0 +1,92 @@
+/*selecting specific fields from bigquery's public data samples to save into a separate table*/
+SELECT
+  CONCAT(fullVisitorId, "-", CAST(visitId AS STRING)) AS visit_unique,
+  fullVisitorId AS visitor_id,
+  TIMESTAMP_MILLIS(visitStartTime*1000) AS time,
+  CAST(CONCAT(SUBSTR(date, 1, 4), "-", SUBSTR(date, 5, 2), "-", SUBSTR(date, 7, 2)) AS DATE) AS date,
+  device.browser AS browser,
+  device.deviceCategory AS device_category,
+  device.operatingSystem AS operating_system,
+  device.isMobile AS is_mobile,
+  geoNetwork.continent AS continent,
+  geoNetwork.subContinent AS subcontinent,
+  geoNetwork.country AS country,
+  geoNetwork.region AS region,
+  geoNetwork.metro AS metro,
+  geoNetwork.city AS city,
+  geoNetwork.networkDomain AS network_domain,
+  channelGrouping AS channel,
+  trafficSource.medium AS medium,
+  trafficSource.source AS source,
+  trafficSource.campaign AS campaign,
+  trafficSource.keyword AS keyword,
+  trafficSource.isTrueDirect AS is_direct,
+  trafficSource.referralPath AS referral_path,
+  trafficSource.adContent AS ad_content,
+  trafficSource.adwordsClickInfo.adNetworkType AS adwork_network_type,
+  trafficSource.adwordsClickInfo.gclId AS adword_gcid,
+  trafficSource.adwordsClickInfo.isVideoAd AS adword_is_video,
+  trafficSource.adwordsClickInfo.page AS adword_page,
+  trafficSource.adwordsClickInfo.slot AS adword_slot,
+  visitNumber AS num_visit,
+  totals.visits AS visit,
+  totals.newVisits AS new_visit,
+  totals.hits AS htis,
+  totals.pageviews AS pageviews,
+  totals.bounces AS bounces,
+  totals.timeOnSite AS site_time,
+  totals.sessionQualityDim AS session_quality,
+  totals.transactions AS transactions,
+  totals.totalTransactionRevenue AS total_revenue
+FROM
+  `bigquery-public-data.google_analytics_sample.ga_sessions_*`
+
+/*looking at records with duplicate visit ids*/
+  WITH
+    t1 AS(
+    SELECT
+      visit_unique,
+      COUNT(visit_unique)
+    FROM
+      `ashtar-assessment.google_merchandise_store.main_nohits`
+    GROUP BY
+      visit_unique
+    HAVING
+      COUNT(visit_unique) > 1)
+  SELECT
+    m.*
+  FROM
+    `ashtar-assessment.google_merchandise_store.main_nohits` AS m
+  JOIN
+    t1
+  ON
+    t1.visit_unique = m.visit_unique
+  ORDER BY
+    visit_unique
+
+/*creating a retentions column*/
+UPDATE
+  `ashtar-assessment.google_merchandise_store.main_nohits`
+SET
+  retentions =
+  CASE
+    WHEN new_visit = 1 THEN 'New Visitor'
+  ELSE
+  'Retained Visitor'
+END
+WHERE
+  visit = 1
+
+/*creating an adword first vs other page column*/
+UPDATE
+  `ashtar-assessment.google_merchandise_store.main_nohits`
+SET
+  adword_firstpage =
+  CASE
+    WHEN adword_page = 1 THEN 'First Page'
+    WHEN adword_page IS NULL THEN NULL
+  ELSE
+  'Other Pages'
+END
+WHERE
+  visit = 1
